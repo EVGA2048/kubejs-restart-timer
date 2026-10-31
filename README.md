@@ -69,19 +69,19 @@ const FORCE_COUNTDOWN_SEC = 30   // /restartnow 的倒计时秒数
 - TPS 由脚本每 20 tick 采样一次、按最近 60 秒的 tick 数估算，数值可能有小幅波动，用于判断趋势足够。
 - 重启使用原版 `stop` 指令，会正常存档、关闭插件后再退出，不是强制杀进程。
 
-## 与 EssentialsX 共存（重要）
+## 与 Spigot/Arclight 内置 `/restart` 的关系（重要）
 
-如果服务端装了 **EssentialsX**，它自带一个 `/restart` 指令：会在执行 `stop` 后等待
-`./start.sh`，脚本不存在时直接冷停服务端，**完全绕过本插件的倒计时与确认**。
+Spigot 自带一个 `/restart`（`org.spigotmc.RestartCommand`），它在服务端启动时**无条件注册**，
+`EssentialsX` 的 `disabled-commands`、Bukkit 的 `commands.yml` 都拦不住它。
 
-建议在 `plugins/Essentials/config.yml` 里禁用它：
+在 **Arclight** 上这个命令还会死锁：它在服务端主线程里调用 `System.exit()`，JVM 等待关闭钩子，
+而关闭钩子又在等主线程结束，于是进程卡在"存档完成"之后再也不退出。
 
-```yaml
-disabled-commands:
-  - restart
-```
+所以：
 
-之后重启统一使用本脚本的 `/restartnow` → `/restartconfirm`。
+- 不要使用 `/restart`
+- 本插件的 `/restartnow` → `/restartconfirm` 走的是正常 `stop` 流程，不会卡死
+- 如果要彻底禁用该命令，可使用同作者的 **NoRestart** 插件拦截（见 GitHub 仓库）
 
 ## 兼容性
 
