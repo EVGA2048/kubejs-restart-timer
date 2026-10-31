@@ -69,6 +69,20 @@ const FORCE_COUNTDOWN_SEC = 30   // /restartnow 的倒计时秒数
 - TPS 由脚本每 20 tick 采样一次、按最近 60 秒的 tick 数估算，数值可能有小幅波动，用于判断趋势足够。
 - 重启使用原版 `stop` 指令，会正常存档、关闭插件后再退出，不是强制杀进程。
 
+## 与 EssentialsX 共存（重要）
+
+如果服务端装了 **EssentialsX**，它自带一个 `/restart` 指令：会在执行 `stop` 后等待
+`./start.sh`，脚本不存在时直接冷停服务端，**完全绕过本插件的倒计时与确认**。
+
+建议在 `plugins/Essentials/config.yml` 里禁用它：
+
+```yaml
+disabled-commands:
+  - restart
+```
+
+之后重启统一使用本脚本的 `/restartnow` → `/restartconfirm`。
+
 ## 兼容性
 
 - Minecraft 1.21.1
