@@ -42,8 +42,9 @@ A daily restart scheduler for KubeJS servers, with in-game reminders, TPS alerts
 | 指令 | 权限 | 说明 |
 |---|---|---|
 | `/restartstatus` | OP (等级 2) | 查看下次重启时间、剩余分钟、当前 TPS |
-| `/skiprestart` | OP (等级 2) | 跳过下一次定时重启（一次性）；也会取消 `/restartnow` 触发的重启 |
-| `/restartnow` | OP (等级 2) | 立即触发重启，30 秒倒计时后执行 |
+| `/skiprestart` | OP (等级 2) | 跳过下一次定时重启（一次性）；也会取消待确认或已触发的重启 |
+| `/restartnow` | OP (等级 2) | 发起重启请求（不会立刻重启），需在 60 秒内确认 |
+| `/restartconfirm` | OP (等级 2) | 确认 `/restartnow` 的请求，随后 30 秒倒计时并重启 |
 
 ## 配置
 

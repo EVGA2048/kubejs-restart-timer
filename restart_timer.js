@@ -34,6 +34,7 @@ let lastWarnAt = 0
 let lastCountdown = -1
 let forcedRestartAt = 0
 let forcedLastSec = -1
+let confirmExpiresAt = 0
 
 function nextDaily(hour) {
     const d = new Date()
@@ -91,6 +92,7 @@ ServerEvents.tick(event => {
     if (server.getTickCount() % 20 !== 0) return
 
     const now = Date.now()
+    if (confirmExpiresAt > 0 && now > confirmExpiresAt) confirmExpiresAt = 0
     if (server.getPlayerCount() > 0) lastActiveAt = now
 
     samples.push({ t: now, ticks: server.getTickCount() })
@@ -180,14 +182,27 @@ ServerEvents.commandRegistry(event => {
     event.register(Commands.literal('skiprestart').requires(s => s.hasPermission(2)).executes(ctx => {
         skipNext = true
         forcedRestartAt = 0
+        confirmExpiresAt = 0
         ctx.source.sendSystemMessage(Text.gold(Text.of('[重启定时器] 已跳过下一次重启（如管理员刚触发重启，也已取消）')))
         return 1
     }))
 
     event.register(Commands.literal('restartnow').requires(s => s.hasPermission(2)).executes(ctx => {
+        confirmExpiresAt = Date.now() + 60000
+        ctx.source.sendSystemMessage(Text.gold(Text.of('[重启定时器] 你确定要立即重启吗？如确认，请在 60 秒内输入 /restartconfirm')))
+        return 1
+    }))
+
+    event.register(Commands.literal('restartconfirm').requires(s => s.hasPermission(2)).executes(ctx => {
+        if (confirmExpiresAt === 0 || Date.now() > confirmExpiresAt) {
+            confirmExpiresAt = 0
+            ctx.source.sendSystemMessage(Text.of('[重启定时器] 没有待确认的重启请求（请先执行 /restartnow）'))
+            return 0
+        }
+        confirmExpiresAt = 0
         forcedRestartAt = Date.now() + FORCE_COUNTDOWN_SEC * 1000
         forcedLastSec = -1
-        ctx.source.sendSystemMessage(Text.gold(Text.of('[重启定时器] 已触发重启，' + FORCE_COUNTDOWN_SEC + ' 秒后执行')))
+        ctx.source.sendSystemMessage(Text.gold(Text.of('[重启定时器] 已确认，' + FORCE_COUNTDOWN_SEC + ' 秒后重启')))
         return 1
     }))
 
