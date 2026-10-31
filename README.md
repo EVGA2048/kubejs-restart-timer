@@ -81,7 +81,7 @@ Spigot 自带一个 `/restart`（`org.spigotmc.RestartCommand`），它在服务
 
 - 不要使用 `/restart`
 - 本插件的 `/restartnow` → `/restartconfirm` 走的是正常 `stop` 流程，不会卡死
-- 如果要彻底禁用该命令，可使用同作者的 **NoRestart** 插件拦截（见 GitHub 仓库）
+- 如果要彻底禁用该命令，可使用同作者的 [NoRestart](https://github.com/EVGA2048/NoRestart) 插件拦截
 
 ## 兼容性
 
