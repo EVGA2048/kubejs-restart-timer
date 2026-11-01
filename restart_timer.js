@@ -173,13 +173,16 @@ ServerEvents.tick(event => {
         return
     }
 
-    for (let i = 0; i < REMINDERS.length; i++) {
-        const r = REMINDERS[i]
-        if (left <= r.ms && !announced[i]) {
-            announced[i] = true
-            if (server.getPlayerCount() > 0) {
-                broadcast(server, 'yellow', '[重启定时器] 距服务器重启还有 ' + r.text + '，请及时保存手头的工作')
+    if (server.getPlayerCount() > 0) {
+        var due = -1
+        for (var i = 0; i < REMINDERS.length; i++) {
+            if (left <= REMINDERS[i].ms && !announced[i]) due = i
+        }
+        if (due >= 0) {
+            for (var j = 0; j < REMINDERS.length; j++) {
+                if (left <= REMINDERS[j].ms) announced[j] = true
             }
+                broadcast(server, 'yellow', '[重启定时器] 距服务器重启还有 ' + REMINDERS[due].text + '，请及时保存手头的工作')
         }
     }
 })
