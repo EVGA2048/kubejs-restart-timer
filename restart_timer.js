@@ -35,7 +35,6 @@ let lastCountdown = -1
 let forcedRestartAt = 0
 let forcedLastSec = -1
 let confirmExpiresAt = 0
-const System = Java.loadClass('java.lang.System')
 
 
 function nextDaily(hour) {
@@ -54,11 +53,12 @@ function scheduleNext() {
 
 function broadcast(server, color, msg) {
     const now = Date.now()
-    const last = System.getProperty('es2rt.lastMsg') || ''
-    const lastAt = Number(System.getProperty('es2rt.lastAt') || 0)
+    const pd = server.persistentData
+    const last = pd.getString('es2rtLastMsg')
+    const lastAt = pd.getLong('es2rtLastAt')
     if (last === msg && now - lastAt < 2000) return
-    System.setProperty('es2rt.lastMsg', msg)
-    System.setProperty('es2rt.lastAt', '' + now)
+    pd.putString('es2rtLastMsg', msg)
+    pd.putLong('es2rtLastAt', now)
     let c = Text.of(msg)
     if (color === 'gold') c = Text.gold(c)
     else if (color === 'red') c = Text.red(c)
