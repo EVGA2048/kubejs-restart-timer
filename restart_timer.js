@@ -133,8 +133,11 @@ ServerEvents.tick(event => {
         }
         const sec = Math.ceil(left / 1000)
         if (sec !== forcedLastSec) {
+            var first = forcedLastSec === -1
             forcedLastSec = sec
-            broadcast(server, 'red', '[重启定时器] 服务器将在 ' + sec + ' 秒后重启')
+            if (first || sec <= 10) {
+                broadcast(server, 'red', '[重启定时器] 服务器将在 ' + sec + ' 秒后重启')
+            }
         }
         return
     }
