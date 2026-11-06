@@ -3,7 +3,7 @@
 // - 提醒：3h / 2h / 1h / 30m / 10m / 5m / 30s，最后 10 秒逐秒倒数
 // - 连续 24 小时无人上线则跳过当天重启
 // - TPS 低于 15 持续 10 分钟：只通知在线管理员，由管理员决定是否重启
-// - /skiprestart  跳过下一次重启（也会取消管理员触发的重启）
+// - /skiprestart  立即跳过下一次定时重启；若管理员刚触发重启，则取消该次手动重启
 // - /restartnow   管理员立即触发重启（30 秒倒计时）
 // - /restartstatus 查看下次重启时间与当前 TPS
 
@@ -13,6 +13,9 @@ const TPS_WARN = 15
 const TPS_WARN_MINUTES = 10
 const TPS_WARN_COOLDOWN_MIN = 60
 const FORCE_COUNTDOWN_SEC = 30
+
+const PD_NEXT_RESTART = 'es2rtNextRestartAt'
+const PD_SKIP_TARGET = 'es2rtSkipTarget'
 
 const REMINDERS = [
     { ms: 3 * 60 * 60 * 1000, text: '3 小时' },
@@ -25,7 +28,6 @@ const REMINDERS = [
 ]
 
 let nextRestartAt = 0
-let skipNext = false
 let announced = {}
 let lastActiveAt = Date.now()
 let samples = []
@@ -44,11 +46,38 @@ function nextDaily(hour) {
     return t.getTime()
 }
 
-function scheduleNext() {
+// 从某个重启时间推进到下一个自然日的同一时刻
+function nextDayAt(ts) {
+    const d = new Date(ts)
+    d.setDate(d.getDate() + 1)
+    return d.getTime()
+}
+
+function saveSchedule(server) {
+    if (!server) return
+    server.persistentData.putLong(PD_NEXT_RESTART, nextRestartAt)
+}
+
+function scheduleNext(server) {
     nextRestartAt = nextDaily(RESTART_HOUR)
     announced = {}
     lastCountdown = -1
+    saveSchedule(server)
     console.info('[重启定时器] 下次重启：' + new Date(nextRestartAt).toString())
+}
+
+// 读取持久化的日程。这样 /reload 或重启服务端后，
+// 已跳过的重启不会被重新算回今天，也不会重复提醒。
+function loadSchedule(server) {
+    const saved = server.persistentData.getLong(PD_NEXT_RESTART)
+    if (saved > Date.now()) {
+        nextRestartAt = saved
+        announced = {}
+        lastCountdown = -1
+        console.info('[重启定时器] 恢复下次重启：' + new Date(nextRestartAt).toString())
+    } else {
+        scheduleNext(server)
+    }
 }
 
 function broadcast(server, color, msg) {
@@ -90,13 +119,18 @@ function currentTps() {
 
 ServerEvents.loaded(event => {
     lastActiveAt = Date.now()
-    scheduleNext()
+    loadSchedule(event.server)
     console.info('[重启定时器] 已启用')
 })
 
 ServerEvents.tick(event => {
     const server = event.server
     if (!server) return
+    // 兜底：/kubejs reload server-scripts 不一定会重新触发 loaded 事件
+    if (nextRestartAt === 0) {
+        loadSchedule(server)
+        return
+    }
     if (server.getTickCount() % 20 !== 0) return
 
     const now = Date.now()
@@ -146,15 +180,8 @@ ServerEvents.tick(event => {
     const left = nextRestartAt - now
 
     if (left <= 0) {
-        if (skipNext) {
-            skipNext = false
-            scheduleNext()
-            broadcast(server, 'gold', '[重启定时器] 已按请求跳过本次重启，下次：' + new Date(nextRestartAt).toLocaleString())
-            return
-        }
-
         if (now - lastActiveAt > IDLE_SKIP_HOURS * 60 * 60 * 1000) {
-            scheduleNext()
+            scheduleNext(server)
             console.info('[重启定时器] 已连续 ' + IDLE_SKIP_HOURS + ' 小时无人上线，跳过本次重启')
             return
         }
@@ -194,10 +221,49 @@ ServerEvents.commandRegistry(event => {
     const { commands: Commands } = event
 
     event.register(Commands.literal('skiprestart').requires(s => s.hasPermission(2)).executes(ctx => {
-        skipNext = true
-        forcedRestartAt = 0
+        const server = ctx.source.getServer()
+        const now = Date.now()
+
+        // /skiprestart 同时也取消待确认的 /restartnow 请求
         confirmExpiresAt = 0
-        ctx.source.sendSystemMessage(Text.gold(Text.of('[重启定时器] 已跳过下一次重启（如管理员刚触发重启，也已取消）')))
+
+        // 先处理管理员刚触发的手动重启：只取消这一次，不动每日日程
+        if (forcedRestartAt > 0) {
+            forcedRestartAt = 0
+            forcedLastSec = -1
+            const msg = '[重启定时器] 已取消管理员触发的重启；每日重启仍将在 ' +
+                new Date(nextRestartAt).toLocaleString()
+            broadcast(server, 'gold', msg)
+            console.info(msg)
+            return 1
+        }
+
+        if (nextRestartAt <= now) {
+            ctx.source.sendSystemMessage(Text.gold(Text.of('[重启定时器] 没有可跳过的定时重启')))
+            return 0
+        }
+
+        const pd = server.persistentData
+
+        // 同一次重启只允许跳过一次，避免连按把后面几天一起跳过
+        const skipTarget = pd.getLong(PD_SKIP_TARGET)
+        if (skipTarget > now) {
+            ctx.source.sendSystemMessage(Text.gold(Text.of(
+                '[重启定时器] 本次重启已经跳过，下次重启：' + new Date(nextRestartAt).toLocaleString())))
+            return 1
+        }
+
+        const skippedAt = nextRestartAt
+        nextRestartAt = nextDayAt(skippedAt)
+        announced = {}
+        lastCountdown = -1
+        pd.putLong(PD_SKIP_TARGET, skippedAt)
+        saveSchedule(server)
+
+        const msg = '[重启定时器] 已跳过本次重启（原定 ' + new Date(skippedAt).toLocaleString() +
+            '），下次重启：' + new Date(nextRestartAt).toLocaleString()
+        broadcast(server, 'gold', msg)
+        console.info(msg)
         return 1
     }))
 
@@ -227,7 +293,10 @@ ServerEvents.commandRegistry(event => {
         }
         const mins = Math.max(0, Math.ceil((nextRestartAt - Date.now()) / 60000))
         let msg = '[重启定时器] 下次重启：' + new Date(nextRestartAt).toLocaleString() + '（约 ' + mins + ' 分钟后）'
-        if (skipNext) msg += '（已请求跳过）'
+        const skipTarget = ctx.source.getServer().persistentData.getLong(PD_SKIP_TARGET)
+        if (skipTarget > Date.now()) {
+            msg += '（已跳过原定 ' + new Date(skipTarget).toLocaleString() + ' 的重启）'
+        }
         msg += ' 当前 TPS：' + currentTps().toFixed(1)
         ctx.source.sendSystemMessage(Text.of(msg))
         return 1

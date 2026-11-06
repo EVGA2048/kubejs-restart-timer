@@ -42,7 +42,7 @@ A daily restart scheduler for KubeJS servers, with in-game reminders, TPS alerts
 | 指令 | 权限 | 说明 |
 |---|---|---|
 | `/restartstatus` | OP (等级 2) | 查看下次重启时间、剩余分钟、当前 TPS |
-| `/skiprestart` | OP (等级 2) | 跳过下一次定时重启（一次性）；也会取消待确认或已触发的重启 |
+| `/skiprestart` | OP (等级 2) | 立即跳过下一次定时重启，并把日程推到下一自然日；同时取消待确认或已触发的手动重启（若手动重启已进入倒计时，只取消该次，每日日程保持不变） |
 | `/restartnow` | OP (等级 2) | 发起重启请求（不会立刻重启），需在 60 秒内确认 |
 | `/restartconfirm` | OP (等级 2) | 确认 `/restartnow` 的请求，随后 30 秒倒计时并重启 |
 
@@ -90,6 +90,15 @@ Spigot 自带一个 `/restart`（`org.spigotmc.RestartCommand`），它在服务
 - KubeJS 2101.x（在 `2101.7.2-build.348` 上测试）
 
 其他版本的事件/指令 API 可能不同，不保证可用。
+
+## 更新记录
+
+### v1.1.0
+
+- 修复 `/skiprestart` 后当天仍发送常规提醒和最后 10 秒倒计时的问题：跳过现在立即生效，日程直接推进到下一自然日。
+- 下次重启时间写入 `server.persistentData`，`/reload` 或重启服务端后不会恢复当天倒计时。
+- 同一次重启只允许跳过一次，避免连按误跳多天。
+- `/restartstatus` 会显示被跳过的原定时间。
 
 ## License
 
